@@ -91,9 +91,11 @@ class FakeBot(BotClient):
         self.command_calls: list[dict] = []
         self.callback_calls: list[dict] = []
         self.send_calls: list[dict] = []
+        self.rich_calls: list[dict] = []
         self.document_calls: list[dict] = []
         self.edit_calls: list[dict] = []
         self.edit_result: EditResult | None = None
+        self.rich_supported = True
         self.edit_topic_calls: list[dict[str, Any]] = []
         self.delete_calls: list[dict] = []
 
@@ -167,6 +169,32 @@ class FakeBot(BotClient):
         )
         return Message(message_id=2, chat=Chat(id=chat_id, type="private"))
 
+    async def send_rich_message(
+        self,
+        chat_id: int,
+        rich_message: dict[str, Any],
+        reply_to_message_id: int | None = None,
+        disable_notification: bool | None = False,
+        message_thread_id: int | None = None,
+        reply_markup: dict | None = None,
+        *,
+        replace_message_id: int | None = None,
+    ) -> Message | None:
+        self.rich_calls.append(
+            {
+                "chat_id": chat_id,
+                "rich_message": rich_message,
+                "reply_to_message_id": reply_to_message_id,
+                "disable_notification": disable_notification,
+                "message_thread_id": message_thread_id,
+                "reply_markup": reply_markup,
+                "replace_message_id": replace_message_id,
+            }
+        )
+        if not self.rich_supported:
+            return None
+        return Message(message_id=3, chat=Chat(id=chat_id, type="private"))
+
     async def edit_message_text(
         self,
         chat_id: int,
@@ -175,6 +203,7 @@ class FakeBot(BotClient):
         entities: list[dict[str, Any]] | None = None,
         parse_mode: str | None = None,
         reply_markup: dict | None = None,
+        rich_message: dict[str, Any] | None = None,
         *,
         wait: bool = True,
     ) -> EditResult:
@@ -186,9 +215,12 @@ class FakeBot(BotClient):
                 "entities": entities,
                 "parse_mode": parse_mode,
                 "reply_markup": reply_markup,
+                "rich_message": rich_message,
                 "wait": wait,
             }
         )
+        if rich_message is not None and not self.rich_supported:
+            return None
         if self.edit_result is not None:
             return self.edit_result
         return Message(message_id=message_id, chat=Chat(id=chat_id, type="private"))

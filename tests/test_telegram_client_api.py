@@ -73,6 +73,7 @@ async def test_client_methods_build_params_and_decode() -> None:
         "getUpdates": [{"update_id": 1}],
         "getFile": {"file_path": "path"},
         "sendMessage": {"message_id": 1, "chat": {"id": 1, "type": "private"}},
+        "sendRichMessage": {"message_id": 4, "chat": {"id": 1, "type": "private"}},
         "sendDocument": {"message_id": 2, "chat": {"id": 1, "type": "private"}},
         "editMessageText": {"message_id": 3, "chat": {"id": 1, "type": "private"}},
         "deleteMessage": True,
@@ -123,6 +124,9 @@ async def test_client_methods_build_params_and_decode() -> None:
     )
     assert msg and msg.message_id == 1
 
+    rich = await client.send_rich_message(1, {"markdown": "| A | B |"})
+    assert rich and rich.message_id == 4
+
     doc = await client.send_document(
         1,
         "file.txt",
@@ -166,6 +170,9 @@ async def test_client_methods_build_params_and_decode() -> None:
     assert send_call[1]["parse_mode"] == "Markdown"
     assert send_call[1]["link_preview_options"] == {"is_disabled": True}
     assert send_call[1]["reply_markup"]
+
+    rich_call = next(call for call in client.calls if call[0] == "sendRichMessage")
+    assert rich_call[1]["rich_message"] == {"markdown": "| A | B |"}
 
     doc_call = next(call for call in client.calls if call[0] == "sendDocument")
     assert doc_call[2]["caption"] == "doc"

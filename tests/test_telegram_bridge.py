@@ -375,6 +375,81 @@ def test_telegram_presenter_split_overflow_adds_followups() -> None:
     )
 
 
+RICH_TABLE_ANSWER = "| A | B |\n|---|---|\n| 1 | 2 |\n"
+
+
+def _rich_final(answer: str = RICH_TABLE_ANSWER) -> RenderedMessage:
+    return TelegramPresenter(rich_messages="auto").render_final(
+        ProgressTracker(engine="codex").snapshot(),
+        elapsed_s=0.0,
+        status="done",
+        answer=answer,
+    )
+
+
+def test_telegram_presenter_rich_keeps_regular_fallback() -> None:
+    plain = TelegramPresenter().render_final(
+        ProgressTracker(engine="codex").snapshot(),
+        elapsed_s=0.0,
+        status="done",
+        answer=RICH_TABLE_ANSWER,
+    )
+    rendered = _rich_final()
+
+    assert rendered.extra["rich_message"]["markdown"].endswith(
+        RICH_TABLE_ANSWER.strip()
+    )
+    assert rendered.text == plain.text
+    assert rendered.extra["entities"] == plain.extra["entities"]
+
+
+def test_telegram_presenter_rich_skips_split_answers() -> None:
+    presenter = TelegramPresenter(rich_messages="auto", message_overflow="split")
+    rendered = presenter.render_final(
+        ProgressTracker(engine="codex").snapshot(),
+        elapsed_s=0.0,
+        status="done",
+        answer=RICH_TABLE_ANSWER + "x" * (MAX_BODY_CHARS + 10),
+    )
+
+    assert rendered.extra.get("followups")
+    assert "rich_message" not in rendered.extra
+
+
+@pytest.mark.anyio
+async def test_telegram_transport_edit_falls_back_when_rich_is_rejected() -> None:
+    bot = FakeBot()
+    bot.rich_supported = False
+    transport = TelegramTransport(bot)
+    message = _rich_final()
+
+    edited = await transport.edit(
+        ref=MessageRef(channel_id=123, message_id=42),
+        message=message,
+    )
+
+    assert edited is not None
+    assert len(bot.edit_calls) == 2
+    assert bot.edit_calls[0]["rich_message"] is not None
+    assert bot.edit_calls[1]["rich_message"] is None
+    assert bot.edit_calls[1]["text"] == message.text
+
+
+@pytest.mark.anyio
+async def test_telegram_transport_send_falls_back_when_rich_is_rejected() -> None:
+    bot = FakeBot()
+    bot.rich_supported = False
+    transport = TelegramTransport(bot)
+    message = _rich_final()
+
+    sent = await transport.send(channel_id=123, message=message)
+
+    assert sent is not None
+    assert len(bot.rich_calls) == 1
+    assert len(bot.send_calls) == 1
+    assert bot.send_calls[0]["text"] == message.text
+
+
 @pytest.mark.anyio
 async def test_telegram_transport_passes_replace_and_wait() -> None:
     bot = FakeBot()
@@ -563,6 +638,7 @@ async def test_telegram_transport_edit_wait_false_returns_ref() -> None:
             entities: list[dict[str, Any]] | None = None,
             parse_mode: str | None = None,
             reply_markup: dict | None = None,
+            rich_message: dict[str, Any] | None = None,
             *,
             wait: bool = True,
         ) -> Message | None:
@@ -574,6 +650,7 @@ async def test_telegram_transport_edit_wait_false_returns_ref() -> None:
                     "entities": entities,
                     "parse_mode": parse_mode,
                     "reply_markup": reply_markup,
+                    "rich_message": rich_message,
                     "wait": wait,
                 }
             )

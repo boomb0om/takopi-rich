@@ -178,6 +178,32 @@ instead:
 Split mode sends multiple messages. Each chunk includes the footer; follow-up
 chunks add a "continued (N/M)" header.
 
+## Rich messages (optional)
+
+Regular messages flatten GFM pipe tables. Telegram rich messages render them
+natively; the feature is off by default:
+
+=== "takopi config"
+
+    ```sh
+    takopi config set transports.telegram.rich_messages "auto"
+    ```
+
+=== "toml"
+
+    ```toml
+    [transports.telegram]
+    rich_messages = "auto" # off | auto | always
+    ```
+
+- **`off`**: regular messages only.
+- **`auto`**: rich markdown for GFM tables and long answers with level-2+ headings.
+- **`always`**: every final answer uses rich markdown.
+
+Only final answers are affected; progress updates remain regular messages. A
+rejected rich payload falls back to the regular rendering, and split answers
+also stay on the regular path.
+
 ## Forum topics (optional)
 
 If you chose the **workspace** workflow during onboarding, topics are already enabled.
