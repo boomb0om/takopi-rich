@@ -12,6 +12,8 @@ logger = get_logger(__name__)
 
 T = TypeVar("T")
 _NETWORK_RETRY_AFTER_S = 2.0
+_CONNECT_TIMEOUT_S = 10.0
+_LONG_POLL_READ_TIMEOUT_MARGIN_S = 15.0
 
 
 class RetryAfter(Exception):
@@ -140,7 +142,12 @@ class HttpBotClient:
             raise ValueError("Telegram token is empty")
         self._base = f"https://api.telegram.org/bot{token}"
         self._file_base = f"https://api.telegram.org/file/bot{token}"
-        self._http_client = http_client or httpx.AsyncClient(timeout=timeout_s)
+        self._http_client = http_client or httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                timeout_s,
+                connect=min(_CONNECT_TIMEOUT_S, timeout_s),
+            )
+        )
         self._owns_http_client = http_client is None
 
     async def close(self) -> None:
@@ -192,15 +199,21 @@ class HttpBotClient:
         json: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
         files: dict[str, Any] | None = None,
+        timeout: httpx.Timeout | None = None,
     ) -> Any | None:
         request_payload = json if json is not None else data
         logger.debug("telegram.request", method=method, payload=request_payload)
         try:
             if json is not None:
-                resp = await self._http_client.post(f"{self._base}/{method}", json=json)
+                resp = await self._http_client.post(
+                    f"{self._base}/{method}", json=json, timeout=timeout
+                )
             else:
                 resp = await self._http_client.post(
-                    f"{self._base}/{method}", data=data, files=files
+                    f"{self._base}/{method}",
+                    data=data,
+                    files=files,
+                    timeout=timeout,
                 )
         except httpx.HTTPError as exc:
             url = getattr(exc.request, "url", None)
@@ -286,8 +299,14 @@ class HttpBotClient:
             )
             return None
 
-    async def _post(self, method: str, json_data: dict[str, Any]) -> Any | None:
-        return await self._request(method, json=json_data)
+    async def _post(
+        self,
+        method: str,
+        json_data: dict[str, Any],
+        *,
+        timeout: httpx.Timeout | None = None,
+    ) -> Any | None:
+        return await self._request(method, json=json_data, timeout=timeout)
 
     async def _post_form(
         self,
@@ -308,7 +327,13 @@ class HttpBotClient:
             params["offset"] = offset
         if allowed_updates is not None:
             params["allowed_updates"] = allowed_updates
-        result = await self._post("getUpdates", params)
+        timeout = httpx.Timeout(
+            connect=_CONNECT_TIMEOUT_S,
+            read=timeout_s + _LONG_POLL_READ_TIMEOUT_MARGIN_S,
+            write=_CONNECT_TIMEOUT_S,
+            pool=_CONNECT_TIMEOUT_S,
+        )
+        result = await self._post("getUpdates", params, timeout=timeout)
         if result is None or not isinstance(result, list):
             return None
         try:

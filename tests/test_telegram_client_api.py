@@ -96,7 +96,9 @@ async def test_client_methods_build_params_and_decode() -> None:
             json: dict | None = None,
             data: dict | None = None,
             files: dict | None = None,
+            timeout: httpx.Timeout | None = None,
         ) -> object | None:
+            _ = timeout
             self.calls.append((method, json, data, files))
             return payloads.get(method)
 
@@ -169,6 +171,36 @@ async def test_client_methods_build_params_and_decode() -> None:
 
     edit_call = next(call for call in client.calls if call[0] == "editMessageText")
     assert edit_call[1]["link_preview_options"] == {"is_disabled": True}
+
+
+@pytest.mark.anyio
+async def test_default_timeout_limits_connection_phase() -> None:
+    client = HttpBotClient("token")
+    try:
+        assert client._http_client.timeout.connect == 10.0
+        assert client._http_client.timeout.read == 120.0
+    finally:
+        await client.close()
+
+
+@pytest.mark.anyio
+async def test_get_updates_uses_long_poll_timeout() -> None:
+    observed_timeouts: list[dict[str, float]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed_timeouts.append(request.extensions["timeout"])
+        return httpx.Response(200, json={"ok": True, "result": []}, request=request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        api = HttpBotClient("token", http_client=client)
+        assert await api.get_updates(offset=None, timeout_s=50) == []
+    finally:
+        await client.aclose()
+
+    assert observed_timeouts == [
+        {"connect": 10.0, "read": 65.0, "write": 10.0, "pool": 10.0}
+    ]
 
 
 @pytest.mark.anyio
