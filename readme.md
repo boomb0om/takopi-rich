@@ -26,7 +26,9 @@ at least one engine on PATH: `codex`, `claude`, `opencode`, or `pi`
 ## install
 
 ```sh
-uv tool install -U takopi
+git clone https://github.com/boomb0om/takopi-rich.git
+cd takopi-rich
+uv tool install .
 ```
 
 ## setup
