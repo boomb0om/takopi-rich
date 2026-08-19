@@ -9,6 +9,7 @@ telegram bridge for codex, claude code, opencode, pi. manage multiple projects a
 - projects and worktrees: work on multiple repos/branches simultaneously, branches are git worktrees
 - stateless resume: continue in chat or copy the resume line to pick up in terminal
 - progress streaming: commands, tools, file changes, elapsed time
+- native Telegram tables: render GFM tables in final answers with optional rich messages
 - parallel runs across agent sessions, per-agent-session queue with Codex steering/cancel controls
 - works with telegram features like voice notes and scheduled messages
 - file transfer: send files to the repo or fetch files/dirs back
@@ -60,6 +61,15 @@ register a project with `takopi init happy-gadgets`, then target it from anywher
 mention a branch to run an agent in a dedicated worktree `/happy-gadgets @feat/memory-box freeze artifacts forever`.
 
 inspect or update settings with `takopi config list`, `takopi config get`, and `takopi config set`.
+
+To render Markdown tables natively in Telegram final answers, enable rich messages:
+
+```sh
+takopi config set transports.telegram.rich_messages "auto"
+```
+
+This affects final answers only and falls back to regular Telegram formatting if
+the rich payload is unsupported. See the [Telegram transport reference](docs/reference/transports/telegram.md#rich-messages-optional) for modes and limits.
 
 see [takopi.dev](https://takopi.dev/) for configuration, worktrees, topics, file transfer, and more.
 
