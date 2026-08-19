@@ -2,11 +2,12 @@ import httpx
 import pytest
 
 from takopi.telegram.client_api import (
+    MESSAGE_UNCHANGED,
     HttpBotClient,
     TelegramRetryAfter,
     retry_after_from_payload,
 )
-from takopi.telegram.api_models import User
+from takopi.telegram.api_models import Message, User
 
 
 def _response() -> httpx.Response:
@@ -97,8 +98,9 @@ async def test_client_methods_build_params_and_decode() -> None:
             data: dict | None = None,
             files: dict | None = None,
             timeout: httpx.Timeout | None = None,
+            benign_400: str | None = None,
         ) -> object | None:
-            _ = timeout
+            _ = timeout, benign_400
             self.calls.append((method, json, data, files))
             return payloads.get(method)
 
@@ -140,7 +142,7 @@ async def test_client_methods_build_params_and_decode() -> None:
         parse_mode="Markdown",
         reply_markup={"inline_keyboard": []},
     )
-    assert edit and edit.message_id == 3
+    assert isinstance(edit, Message) and edit.message_id == 3
 
     assert await client.delete_message(1, 2) is True
     assert await client.set_my_commands(
@@ -201,6 +203,48 @@ async def test_get_updates_uses_long_poll_timeout() -> None:
     assert observed_timeouts == [
         {"connect": 10.0, "read": 65.0, "write": 10.0, "pool": 10.0}
     ]
+
+
+@pytest.mark.anyio
+async def test_edit_message_text_not_modified_is_a_no_op() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "ok": False,
+                "error_code": 400,
+                "description": "Bad Request: message is not modified",
+            },
+            request=request,
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        api = HttpBotClient("token", http_client=client)
+        assert await api.edit_message_text(1, 2, "same") is MESSAGE_UNCHANGED
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.anyio
+async def test_edit_message_text_other_400_still_fails() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "ok": False,
+                "error_code": 400,
+                "description": "Bad Request: message to edit not found",
+            },
+            request=request,
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        api = HttpBotClient("token", http_client=client)
+        assert await api.edit_message_text(1, 2, "text") is None
+    finally:
+        await client.aclose()
 
 
 @pytest.mark.anyio

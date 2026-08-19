@@ -18,7 +18,7 @@ from ..settings import (
     TelegramTopicsSettings,
     TelegramTransportSettings,
 )
-from .client import BotClient
+from .client import BotClient, MessageUnchanged
 from .render import MAX_BODY_CHARS, prepare_telegram, prepare_telegram_multi
 from .types import TelegramCallbackQuery, TelegramIncomingMessage
 
@@ -297,6 +297,8 @@ class TelegramTransport:
                 message_thread_id=message_thread_id,
                 notify=notify,
             )
+        if isinstance(edited, MessageUnchanged):
+            return ref
         message_id = edited.message_id
         thread_id = (
             edited.message_thread_id

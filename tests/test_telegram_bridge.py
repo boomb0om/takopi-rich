@@ -27,7 +27,7 @@ from takopi.telegram.bridge import (
     run_main_loop,
     send_with_resume,
 )
-from takopi.telegram.client import BotClient
+from takopi.telegram.client import MESSAGE_UNCHANGED, BotClient
 from takopi.telegram.render import MAX_BODY_CHARS
 from takopi.telegram.topic_state import TopicStateStore, resolve_state_path
 from takopi.telegram.chat_sessions import ChatSessionStore, resolve_sessions_path
@@ -467,6 +467,33 @@ async def test_telegram_transport_edits_and_sends_followups() -> None:
     assert bot.send_calls[0]["reply_to_message_id"] == 10
     assert bot.send_calls[0]["message_thread_id"] == 7
     assert bot.send_calls[0]["disable_notification"] is True
+
+
+@pytest.mark.anyio
+async def test_telegram_transport_edit_unchanged_sends_followups() -> None:
+    bot = FakeBot()
+    bot.edit_result = MESSAGE_UNCHANGED
+    transport = TelegramTransport(bot)
+    followup = RenderedMessage(text="part 2")
+    ref = MessageRef(channel_id=123, message_id=42, thread_id=7)
+
+    edited = await transport.edit(
+        ref=ref,
+        message=RenderedMessage(
+            text="part 1",
+            extra={
+                "followups": [followup],
+                "followup_reply_to_message_id": 10,
+                "followup_thread_id": 7,
+                "followup_notify": False,
+            },
+        ),
+    )
+
+    assert edited == ref
+    assert len(bot.edit_calls) == 1
+    assert len(bot.send_calls) == 1
+    assert bot.send_calls[0]["text"] == "part 2"
 
 
 @pytest.mark.anyio
